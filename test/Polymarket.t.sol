@@ -36,13 +36,13 @@ contract PolymarketTest is Test {
         assertEq(totalQuestions, 1);
     }
 
-    function _checkAmounts(uint256 total, uint256 yes, uint256 no) internal {
+    function _checkAmounts(uint256 total, uint256 yes, uint256 no) internal pure {
         assertEq(total, 0);
         assertEq(yes, 0);
         assertEq(no, 0);
     }
 
-    function _checkDetails(bool completed, string memory desc, string memory url, string memory expectedDesc, string memory expectedUrl) internal {
+    function _checkDetails(bool completed, string memory desc, string memory url, string memory expectedDesc, string memory expectedUrl) internal pure {
         assertEq(completed, false);
         assertEq(desc, expectedDesc);
         assertEq(url, expectedUrl);
@@ -100,16 +100,36 @@ contract PolymarketTest is Test {
         assertEq(no, betAmount, "No should be 100");
 
         // 4. Distribute Winnings (Outcome: YES)
-        // Capture balance before
-        uint256 balanceBefore = polyToken.balanceOf(address(this));
-        
+        // Note: No automatic transfer happening here anymore
         polymarket.distributeWinningAmount(0, true);
 
-        // 5. Verify Profit
+        // 5. Verify Claimable Amount
         // Expected: Original 100 + 100 (won from loser) = 200 increase
-        uint256 balanceAfter = polyToken.balanceOf(address(this));
-        uint256 winnings = balanceAfter - balanceBefore;
+        uint256 expectedWinnings = betAmount * 2;
+        uint256 claimable = polymarket.claimableWinnings(address(this));
+        assertEq(claimable, expectedWinnings, "Should have claimable winnings recorded");
 
-        assertEq(winnings, betAmount * 2, "Should win 2x the bet (principal + profit)");
+        // 6. Claim Winnings
+        uint256 balanceBefore = polyToken.balanceOf(address(this));
+        polymarket.claimWinnings();
+        uint256 balanceAfter = polyToken.balanceOf(address(this));
+        
+        assertEq(balanceAfter - balanceBefore, expectedWinnings, "Should receive tokens after claiming");
+    }
+
+    function testBettingOnSecondQuestion() public {
+        // Create first question (ID 0)
+        polymarket.createQuestion("Q1", "H1", "D1", "U1", block.timestamp + 100);
+        // Create second question (ID 1)
+        polymarket.createQuestion("Q2", "H2", "D2", "U2", block.timestamp + 100);
+
+        uint256 betAmount = 10 * 10**18;
+        polyToken.approve(address(polymarket), betAmount);
+
+        // Try betting on ID 1 (should work now)
+        polymarket.addYesBet(1, betAmount);
+        
+        (uint256 total, , ) = polymarket.getQuestionTotals(1);
+        assertEq(total, betAmount, "Should be able to bet on question 1");
     }
 }
